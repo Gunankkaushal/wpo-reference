@@ -1,0 +1,58 @@
+# Declared topology for NaviStorm (the "declared topology file" discovery source).
+# Mirrors the journey screen: 5 agents, 11 tools, 6 systems, 18 edges.
+# Every span the agents emit carries wpo.edge_id, so traces and this file agree.
+
+product: workforce-optimization
+short_name: WPO
+owner: WPO product team
+
+systems:
+  - {id: sap,     name: "SAP S/4",          class: validated,   note: "GxP adjacent",       stub: "stub-sap:8101",     mcp: ":9101/mcp"}
+  - {id: workday, name: "Workday",          class: validated,   note: "HR record",          stub: "stub-workday:8102", mcp: ":9102/mcp"}
+  - {id: mes,     name: "MES",              class: operational,                             stub: "stub-mes:8103",     mcp: ":9103/mcp"}
+  - {id: lms,     name: "Learning system",  class: validated,   note: "training record",    stub: "stub-lms:8104",     mcp: ":9104/mcp"}
+  - {id: cuopt,   name: "NVIDIA cuOpt",     class: internal,                                stub: "stub-cuopt:8105",   mcp: ":9105/mcp"}
+  - {id: teams,   name: "Microsoft Teams",  class: internal,                                stub: "stub-teams:8106",   mcp: ":9106/mcp"}
+internal_services:
+  - {id: policy,  name: "policy.rules",  mcp: ":9107/mcp"}
+  - {id: roster,  name: "roster.store",  mcp: ":9108/mcp"}
+  - {id: forecast-queue, name: "Service Bus forecast-queue", note: "graph-state hand-off in this reference repo"}
+  - {id: azure_openai,   name: "Azure OpenAI", note: "offline responder unless AZURE_OPENAI_* set"}
+
+agents:
+  - {id: demand_forecast,  name: "Demand Forecast Agent",  stage: 1, node: forecast_demand, retry: "unbounded, fixed 0.5s, ignores Retry-After (deliberate defect)"}
+  - {id: roster_optimizer, name: "Roster Optimizer Agent", stage: 2, node: optimize_roster, retry: "2 retries", max_iter: 4}
+  - {id: compliance,       name: "Compliance Agent",       stage: 3, node: compliance,      retry: none, edge: "pass -> writeback, fail -> optimize_roster"}
+  - {id: writeback,        name: "Writeback Agent",        stage: 4, node: writeback,       retry: "on timeout, 3 attempts", write_path: true}
+  - {id: manager_copilot,  name: "Manager Copilot",        stage: 5, graph: wpo_manager_copilot, hours: "Mon-Fri 08:00-18:00"}
+
+journeys:
+  - id: nightly-roster
+    name: Nightly roster generation
+    slo: "14 of 14 sites published by 05:00"
+    window: "02:00-05:00"
+    entrypoint: "python -m wpo_agents nightly"
+  - id: manager-questions
+    name: Manager Copilot answers
+    window: business hours
+    entrypoint: "python -m wpo_agents ask"
+
+edges:
+  - {id: E01, agent: demand_forecast,  target: sap.production_plan,    access: read,       hop: mcp}
+  - {id: E02, agent: demand_forecast,  target: mes.line_availability,  access: read,       hop: mcp}
+  - {id: E03, agent: demand_forecast,  target: workday.absences,       access: read,       hop: mcp, note: "called once per site; first demo target"}
+  - {id: E04, agent: demand_forecast,  target: azure_openai,           access: read,       hop: model}
+  - {id: E05, agent: demand_forecast,  target: forecast-queue,         access: write,      hop: queue, note: "graph state here"}
+  - {id: E06, agent: roster_optimizer, target: forecast-queue,         access: read,       hop: queue, note: "graph state here"}
+  - {id: E07, agent: roster_optimizer, target: workday.workers,        access: read,       hop: mcp}
+  - {id: E08, agent: roster_optimizer, target: lms.training_currency,  access: read,       hop: mcp}
+  - {id: E09, agent: roster_optimizer, target: cuopt.solve,            access: read,       hop: mcp}
+  - {id: E10, agent: roster_optimizer, target: roster.store,           access: write,      hop: mcp}
+  - {id: E11, agent: compliance,       target: policy.rules,           access: read,       hop: mcp}
+  - {id: E12, agent: compliance,       target: lms.training_currency,  access: read,       hop: mcp}
+  - {id: E13, agent: compliance,       target: roster.store,           access: read_write, hop: mcp}
+  - {id: E14, agent: writeback,        target: workday.schedules,      access: write,      hop: mcp, destructive: true}
+  - {id: E15, agent: writeback,        target: sap.shift_confirm,      access: write,      hop: mcp, destructive: true}
+  - {id: E16, agent: writeback,        target: teams.notify,           access: write,      hop: mcp, destructive: true}
+  - {id: E17, agent: manager_copilot,  target: roster.store,           access: read,       hop: mcp, note: "action=latest"}
+  - {id: E18, agent: manager_copilot,  target: azure_openai,           access: read,       hop: model}

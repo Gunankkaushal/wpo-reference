@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WPO Console</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #5d6673; --line: #e2e5ea;
+    --accent: #2457c5; --accent-soft: #e8eefb; --ok: #1f7a4a; --ok-soft: #e4f4ea;
+    --bad: #b42318; --bad-soft: #fde8e6; --warn: #9a5b00; --warn-soft: #fdf1dc;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111418; --panel: #191d23; --ink: #e6e9ee; --muted: #9aa3ae; --line: #2a3038;
+      --accent: #7ea2ff; --accent-soft: #1d2740; --ok: #5cc98d; --ok-soft: #15291e;
+      --bad: #ff8a7a; --bad-soft: #351a17; --warn: #f0b75a; --warn-soft: #33270f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { background: var(--panel); border-bottom: 1px solid var(--line); padding: 14px 24px;
+           display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .right { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  nav { display: flex; gap: 2px; padding: 0 24px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  nav button { border: 0; background: none; color: var(--muted); padding: 11px 14px; font: inherit; cursor: pointer;
+               border-bottom: 2px solid transparent; white-space: nowrap; }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  main { max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
+  section { display: none; } section.active { display: block; }
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .card h2 { font-size: 14px; margin: 0 0 10px; font-weight: 650; }
+  .card h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .muted { color: var(--muted); } .mono { font-family: var(--mono); font-size: 12.5px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px;
+          font-size: 12px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; display: inline-block; }
+  button.primary, button.ghost { font: inherit; border-radius: 7px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); font-weight: 600; }
+  button.ghost { background: var(--panel); color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .55; cursor: not-allowed; }
+  input, select { font: inherit; padding: 7px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  .stat .v { font-size: 24px; font-weight: 650; } .stat .k { color: var(--muted); font-size: 12px; }
+  .pipeline { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-bottom: 16px; }
+  .stage { flex: 1 1 150px; border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--panel); }
+  .stage .n { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .stage .t { font-weight: 600; margin: 2px 0 6px; }
+  .stage.running { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .stage.done { border-color: var(--ok); } .stage.failed { border-color: var(--bad); }
+  .log { font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+         padding: 10px 12px; max-height: 360px; overflow: auto; white-space: pre-wrap; }
+  .log .w { color: var(--warn); } .log .e { color: var(--bad); } .log .n { color: var(--ok); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .chat { display: flex; flex-direction: column; gap: 10px; max-height: 480px; overflow: auto; padding: 4px; }
+  .msg { padding: 10px 12px; border-radius: 9px; max-width: 85%; white-space: pre-wrap; }
+  .msg.q { align-self: flex-end; background: var(--accent); color: #fff; }
+  .msg.a { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); font-family: var(--mono); font-size: 12.5px; }
+  .agent { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .agent:last-child { border-bottom: 0; }
+  .agent .num { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent);
+                display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+  .mermaid { background: var(--panel); overflow-x: auto; }
+  .err { color: var(--bad); }
+  @media (max-width: 640px) { header, nav, main { padding-left: 16px; padding-right: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Workforce Optimization (WPO)</h1>
+    <div class="sub">Nightly roster generation · Manager Copilot · 5 agents over MCP</div>
+  </div>
+  <div class="right" id="hdr-status"><span class="pill">checking systems…</span></div>
+</header>
+<nav id="tabs">
+  <button data-tab="overview" class="active">Overview</button>
+  <button data-tab="nightly">Nightly roster run</button>
+  <button data-tab="roster">Published roster</button>
+  <button data-tab="copilot">Manager Copilot</button>
+  <button data-tab="systems">Systems &amp; calls</button>
+  <button data-tab="topology">Agent graph</button>
+</nav>
+<main>
+
+<!-- Overview -->
+<section id="overview" class="active">
+  <div class="grid g2">
+    <div class="card">
+      <h2>Agents</h2>
+      <div id="agents-list" class="muted">Loading…</div>
+    </div>
+    <div class="card">
+      <h2>Systems</h2>
+      <div id="overview-systems" class="muted">Loading…</div>
+      <h3>Integrations</h3>
+      <div id="overview-integrations" class="muted"></div>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h2>Edges (E01–E18)</h2>
+    <table><thead><tr><th>Edge</th><th>Agent</th><th>Target</th><th>Access</th></tr></thead><tbody id="edges-body"></tbody></table>
+  </div>
+</section>
+
+<!-- Nightly -->
+<section id="nightly">
+  <div class="card" style="margin-bottom:16px">
+    <div class="row">
+      <h2 style="margin:0">Nightly roster generation</h2>
+      <span class="muted">SLO: 14 of 14 sites published by 05:00</span>
+      <span style="margin-left:auto"></span>
+      <label class="muted">Plan date <input type="date" id="plan-date"></label>
+      <button class="primary" id="run-btn">Run nightly roster</button>
+    </div>
+  </div>
+  <div class="pipeline" id="pipeline"></div>
+  <div class="grid g4" id="run-stats" style="margin-bottom:16px"></div>
+  <div class="card">
+    <h2>Run log</h2>
+    <div class="log" id="run-log"><span class="muted">No run yet. Start one above. Forecast retries and tool errors appear here as they happen.</span></div>
+  </div>
+</section>
+
+<!-- Roster -->
+<section id="roster">
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin:0">Latest approved roster</h2>
+      <span id="roster-meta" class="muted"></span>
+      <span style="margin-left:auto"></span>
+      <select id="roster-site"><option value="">All sites</option></select>
+      <button class="ghost" id="roster-refresh">Refresh</button>
+    </div>
+    <div id="roster-body" class="muted">Loading…</div>
+  </div>
+</section>
+
+<!-- Copilot -->
+<section id="copilot">
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="margin:0">Manager Copilot</h2>
+      <span class="muted" id="copilot-hours"></span>
+    </div>
+    <div class="chat" id="chat"></div>
+    <form id="ask-form" class="row" style="margin-top:12px">
+      <input id="question" style="flex:1 1 260px" placeholder="Who is on L1 early?" required>
+      <select id="ask-site"><option value="">All sites</option></select>
+      <label class="muted"><input type="checkbox" id="ignore-hours" checked> ignore business hours (demo)</label>
+      <button class="primary" type="submit" id="ask-btn">Ask</button>
+    </form>
+  </div>
+</section>
+
+<!-- Systems -->
+<section id="systems">
+  <div class="grid g2">
+    <div class="card"><h2>Stub systems</h2><table><thead><tr><th>System</th><th>URL</th><th>Status</th></tr></thead><tbody id="stubs-body"></tbody></table></div>
+    <div class="card"><h2>MCP servers</h2><table><thead><tr><th>Server</th><th>URL</th><th>Status</th></tr></thead><tbody id="mcp-body"></tbody></table></div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <div class="row" style="margin-bottom:8px">
+      <h2 style="margin:0">Calls received by each system</h2>
+      <span class="muted">Counts since last reset. "FAULTED" rows are injected errors.</span>
+      <span style="margin-left:auto"></span>
+      <button class="ghost" id="stats-refresh">Refresh</button>
+      <button class="ghost" id="stats-reset">Reset counters</button>
+    </div>
+    <table><thead><tr><th>System</th><th>Endpoint</th><th style="text-align:right">Calls</th></tr></thead><tbody id="stats-body"></tbody></table>
+  </div>
+</section>
+
+<!-- Topology -->
+<section id="topology">
+  <div class="grid g2">
+    <div class="card"><h2>wpo_nightly_roster (supervisor graph)</h2><pre class="mermaid" id="mm-nightly"></pre></div>
+    <div class="card"><h2>wpo_manager_copilot</h2><pre class="mermaid" id="mm-copilot"></pre></div>
+  </div>
+</section>
+
+</main>
+
+<script type="module">
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  if (!r.ok) throw new Error((await r.text()) || r.statusText);
+  return r.json();
+};
+
+const STAGES = [
+  { node: "supervisor", n: "Open", t: "Supervisor" },
+  { node: "forecast_demand", n: "Stage 1", t: "Demand Forecast" },
+  { node: "optimize_roster", n: "Stage 2", t: "Roster Optimizer" },
+  { node: "compliance", n: "Stage 3", t: "Compliance" },
+  { node: "writeback", n: "Stage 4", t: "Writeback" },
+];
+const SITES = Array.from({ length: 14 }, (_, i) => `SITE-${String(i + 1).padStart(2, "0")}`);
+for (const sel of ["#roster-site", "#ask-site"]) $(sel).insertAdjacentHTML("beforeend", SITES.map((s) => `<option>${s}</option>`).join(""));
+$("#plan-date").value = new Date().toISOString().slice(0, 10);
+
+// tabs
+let topoRendered = false;
+document.querySelectorAll("#tabs button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("#tabs button").forEach((x) => x.classList.toggle("active", x === b));
+  document.querySelectorAll("main section").forEach((s) => s.classList.toggle("active", s.id === b.dataset.tab));
+  if (b.dataset.tab === "roster") loadRoster();
+  if (b.dataset.tab === "systems") { loadSystems(); loadStats(); }
+  if (b.dataset.tab === "topology" && !topoRendered) renderTopology();
+}));
+
+// systems
+let topo = null;
+async function loadSystems() {
+  try {
+    const s = await api("/api/systems");
+    const all = [...s.stubs, ...s.mcp], up = all.filter((x) => x.up).length;
+    $("#hdr-status").innerHTML =
+      `<span class="pill ${up === all.length ? "ok" : "bad"}"><span class="dot"></span>${up}/${all.length} services up</span>` +
+      `<span class="pill">LLM: ${esc(s.llm)}</span><span class="pill ${s.otel ? "ok" : ""}">OTel ${s.otel ? "exporting" : "off"}</span>`;
+    const row = (x) => `<tr><td>${esc(x.label || x.name)}</td><td class="mono muted">${esc(x.url)}</td><td><span class="pill ${x.up ? "ok" : "bad"}"><span class="dot"></span>${x.up ? "up" : "down"}</span></td></tr>`;
+    $("#stubs-body").innerHTML = s.stubs.map(row).join("");
+    $("#mcp-body").innerHTML = s.mcp.map(row).join("");
+    $("#overview-systems").innerHTML = s.stubs.map((x) =>
+      `<div class="row" style="padding:4px 0"><span class="pill ${x.up ? "ok" : "bad"}"><span class="dot"></span>${x.up ? "up" : "down"}</span>${esc(x.label)}</div>`).join("");
+    $("#overview-integrations").innerHTML =
+      `${s.mcp.filter((m) => m.up).length}/${s.mcp.length} MCP servers reachable · model: ${esc(s.llm)} · tracing: ${s.otel ? "OTLP export on" : "off (set OTEL_EXPORTER_OTLP_ENDPOINT)"}`;
+  } catch (e) {
+    $("#hdr-status").innerHTML = `<span class="pill bad">console API error</span>`;
+  }
+}
+
+async function loadTopology() {
+  topo = await api("/api/topology");
+  const byAgent = {};
+  for (const e of topo.edges) (byAgent[e.agent] ||= []).push(e);
+  $("#agents-list").innerHTML = Object.entries(topo.agents).map(([k, label], i) =>
+    `<div class="agent"><div class="num">${i + 1}</div><div><div style="font-weight:600">${esc(label)}</div>
+     <div class="muted mono">${(byAgent[k] || []).map((e) => `${e.edge_id} ${esc(e.target)}`).join(" · ")}</div></div></div>`).join("");
+  $("#edges-body").innerHTML = topo.edges.map((e) =>
+    `<tr><td class="mono">${e.edge_id}</td><td>${esc(topo.agents[e.agent] || e.agent)}</td><td class="mono">${esc(e.target)}</td>
+     <td><span class="pill ${e.access.includes("write") ? "warn" : ""}">${esc(e.access)}</span></td></tr>`).join("");
+}
+
+async function renderTopology() {
+  if (!topo) await loadTopology();
+  const strip = (m) => m.replace(/^---[\s\S]*?---\s*/, "");
+  $("#mm-nightly").textContent = strip(topo.mermaid.nightly);
+  $("#mm-copilot").textContent = strip(topo.mermaid.copilot);
+  try {
+    const { default: mermaid } = await import("https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.esm.min.mjs");
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "neutral" });
+    await mermaid.run({ nodes: [$("#mm-nightly"), $("#mm-copilot")] });
+    topoRendered = true;
+  } catch { /* offline: the Mermaid source stays visible as text */ }
+}
+
+// nightly run
+function drawPipeline(state = {}) {
+  $("#pipeline").innerHTML = STAGES.map((s) => {
+    const st = state[s.node] || {};
+    return `<div class="stage ${st.cls || ""}"><div class="n">${s.n}</div><div class="t">${s.t}</div>
+            <div class="muted" style="font-size:12.5px">${esc(st.text || "waiting")}</div></div>`;
+  }).join("");
+}
+function drawStats(sum) {
+  const items = sum ? [
+    ["Status", sum.status], ["Sites published", `${sum.sites_published} / 14`],
+    ["Forecast retries", sum.forecast_retries], ["Optimizer iterations", sum.optimizer_iterations],
+    ["Elapsed", `${sum.elapsed_s} s`], ["Run id", sum.run_id],
+  ] : [];
+  $("#run-stats").innerHTML = items.map(([k, v]) => `<div class="card stat"><div class="k">${k}</div><div class="v ${k === "Run id" ? "mono" : ""}" style="${k === "Run id" ? "font-size:14px" : ""}">${esc(v)}</div></div>`).join("");
+}
+function stageText(node, d) {
+  if (node === "forecast_demand") return `${d.sites} sites · ${d.slots} slots · ${d.retries} retries`;
+  if (node === "optimize_roster") return `iter ${d.iteration} · ${d.assignments} assigned · ${d.unfilled} unfilled`;
+  if (node === "compliance") return d.result === "pass" ? "pass" : `fail · ${d.violations.length} violation(s)`;
+  if (node === "writeback") return `${d.published_sites.length} sites published`;
+  if (node === "supervisor") return d.run_id || "opened";
+  return "";
+}
+drawPipeline();
+
+$("#run-btn").addEventListener("click", async () => {
+  const btn = $("#run-btn"), logEl = $("#run-log");
+  btn.disabled = true; btn.textContent = "Running…";
+  logEl.innerHTML = ""; drawStats(null);
+  const st = { supervisor: { cls: "running", text: "opening run" } };
+  drawPipeline(st);
+  const line = (cls, t, msg) => { logEl.insertAdjacentHTML("beforeend", `<div class="${cls}">${esc(t)}  ${esc(msg)}</div>`); logEl.scrollTop = logEl.scrollHeight; };
+  try {
+    const r = await fetch("/api/nightly", { method: "POST", headers: { "content-type": "application/json" },
+                                            body: JSON.stringify({ plan_date: $("#plan-date").value || null }) });
+    if (!r.ok) throw new Error(await r.text());
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n")) >= 0) {
+        const ev = JSON.parse(buf.slice(0, i)); buf = buf.slice(i + 1);
+        if (ev.type === "log") line(ev.level === "WARNING" ? "w" : ev.level === "ERROR" ? "e" : "", ev.t, `${ev.logger}  ${ev.message}`);
+        else if (ev.type === "node") {
+          const failed = ev.node === "compliance" && ev.detail.result === "fail";
+          st[ev.node] = { cls: failed ? "failed" : "done", text: stageText(ev.node, ev.detail) };
+          const idx = STAGES.findIndex((s) => s.node === ev.node);
+          const next = failed ? "optimize_roster" : STAGES[idx + 1]?.node;
+          if (next && ev.node !== "writeback") st[next] = { cls: "running", text: "running…" };
+          if (ev.node === "give_up") st.writeback = { cls: "failed", text: "skipped: compliance never passed" };
+          drawPipeline(st);
+          ev.events.forEach((m) => line("n", ev.t, m));
+        } else if (ev.type === "done") { drawStats(ev.summary); line("n", "", `run ${ev.summary.status} in ${ev.summary.elapsed_s}s`); }
+        else if (ev.type === "error") line("e", "", `run failed: ${ev.message}`);
+      }
+    }
+  } catch (e) { line("e", "", String(e.message || e)); }
+  btn.disabled = false; btn.textContent = "Run nightly roster";
+  loadSystems();
+});
+
+// roster
+async function loadRoster() {
+  const body = $("#roster-body");
+  try {
+    const site = $("#roster-site").value;
+    const r = await api("/api/roster" + (site ? `?site_id=${encodeURIComponent(site)}` : ""));
+    if (!r.found) { body.textContent = "No approved roster in the store yet."; $("#roster-meta").textContent = ""; return; }
+    $("#roster-meta").innerHTML = `plan date <b>${esc(r.plan_date)}</b> · ${esc(r.run_id)} · written ${esc(r.written_at)}`;
+    const rows = [];
+    for (const [sid, list] of Object.entries(r.roster))
+      for (const a of [...list].sort((x, y) => (x.shift + x.line_id).localeCompare(y.shift + y.line_id)))
+        rows.push(`<tr><td>${esc(sid)}</td><td>${esc(a.shift)}</td><td>${esc(a.line_id)}</td><td class="mono">${esc(a.worker_id)}</td><td>${esc(a.start)}–${esc(a.end)}</td></tr>`);
+    body.innerHTML = rows.length ? `<table><thead><tr><th>Site</th><th>Shift</th><th>Line</th><th>Worker</th><th>Hours</th></tr></thead><tbody>${rows.join("")}</tbody></table>` : "No assignments for this site.";
+  } catch (e) { body.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+$("#roster-refresh").addEventListener("click", loadRoster);
+$("#roster-site").addEventListener("change", loadRoster);
+
+// copilot
+$("#copilot-hours").textContent = "Available Mon–Fri 08:00–18:00 (Europe/London) · answers from the latest approved roster";
+$("#ask-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const q = $("#question").value.trim(); if (!q) return;
+  const chat = $("#chat");
+  chat.insertAdjacentHTML("beforeend", `<div class="msg q">${esc(q)}</div>`);
+  $("#ask-btn").disabled = true;
+  try {
+    const r = await api("/api/ask", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ question: q, site_id: $("#ask-site").value || null, ignore_hours: $("#ignore-hours").checked }) });
+    chat.insertAdjacentHTML("beforeend", `<div class="msg a">${esc(r.answer)}</div>`);
+  } catch (e) { chat.insertAdjacentHTML("beforeend", `<div class="msg a err">${esc(e.message)}</div>`); }
+  $("#ask-btn").disabled = false; $("#question").value = ""; chat.scrollTop = chat.scrollHeight;
+});
+
+// stats
+async function loadStats() {
+  try {
+    const s = await api("/api/stats");
+    const rows = [];
+    for (const st of s.stubs) {
+      const calls = Object.entries(st.calls).filter(([k]) => !/^GET \/(favicon\.ico)?$/.test(k));
+      if (st.error) rows.push(`<tr><td>${esc(st.label)}</td><td class="err" colspan="2">unreachable</td></tr>`);
+      else if (!calls.length) rows.push(`<tr><td>${esc(st.label)}</td><td class="muted" colspan="2">no calls</td></tr>`);
+      calls.forEach(([k, v], i) => rows.push(`<tr><td>${i ? "" : esc(st.label)}</td><td class="mono ${k.startsWith("FAULTED") ? "err" : ""}">${esc(k)}</td><td style="text-align:right" class="mono">${v}</td></tr>`));
+    }
+    $("#stats-body").innerHTML = rows.join("");
+  } catch (e) { $("#stats-body").innerHTML = `<tr><td class="err" colspan="3">${esc(e.message)}</td></tr>`; }
+}
+$("#stats-refresh").addEventListener("click", loadStats);
+$("#stats-reset").addEventListener("click", async () => { await api("/api/stats/reset", { method: "POST" }); loadStats(); });
+
+loadSystems(); loadTopology();
+setInterval(loadSystems, 15000);
+</script>
+</body>
+</html>

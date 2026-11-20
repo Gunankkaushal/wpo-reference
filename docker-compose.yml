@@ -1,0 +1,52 @@
+services:
+  # One container: all six stubs and all eight MCP servers.
+  wpo-systems:
+    build: .
+    image: wpo-reference:latest
+    container_name: wpo-systems
+    ports:
+      - "8101-8106:8101-8106"   # stub-sap, stub-workday, stub-mes, stub-lms, stub-cuopt, stub-teams
+      - "9101-9108:9101-9108"   # MCP: sap, workday, mes, lms, cuopt, teams, policy, roster
+    volumes:
+      - roster-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8106/health')"]
+      interval: 5s
+      retries: 10
+
+  # The WPO console (web front end). Runs the same agents over MCP.
+  #   http://localhost:8000
+  wpo-ui:
+    image: wpo-reference:latest
+    container_name: wpo-ui
+    depends_on:
+      wpo-systems:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MCP_BASE_HOST: wpo-systems
+      WPO_UI_HOST: 0.0.0.0
+    command: ["python", "-m", "wpo_ui"]
+
+  # The agents. Run on demand:
+  #   docker compose run --rm wpo-agents nightly
+  #   docker compose run --rm wpo-agents ask "Who is on L1 early?" --site SITE-01 --ignore-hours
+  wpo-agents:
+    image: wpo-reference:latest
+    profiles: ["agents"]
+    depends_on:
+      wpo-systems:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MCP_BASE_HOST: wpo-systems
+    entrypoint: ["python", "-m", "wpo_agents"]
+
+volumes:
+  roster-data:
